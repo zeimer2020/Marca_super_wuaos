@@ -1,36 +1,28 @@
-# Marshall: la fuerza tiene forma
+# Marshall Letter Studio
 
-Sistema tipográfico jugable para una portada web o pantalla interactiva de un evento. Las partículas pertenecen al trazado de las letras; no forman un fondo independiente. La caligrafía es un dibujo vectorial propio inspirado en la referencia aportada, no una fuente oficial.
+Una identidad tipográfica convertida en instrumento: ocho letras sólidas doradas, una caja de nogal y una cámara fija. Proyecto académico sin afiliación con Marshall.
 
-## Decisiones de diseño
+## Uso
 
-1. Marshall desarrolla amplificadores, altavoces y auriculares para músicos y amantes de la música.
-2. El atributo es la potencia expresiva: una acción aporta energía y transforma una palabra reconocible. Se basa en la relación histórica de Marshall con la amplificación.
-3. La pieza se plantea como portada web o instalación interactiva; Presentar oculta controles.
-4. Arrastrar aplica fuerza local; clic o Q genera un pulso; mantener W/Cargar comprime y soltar libera energía. V introduce oscilación; Espacio aumenta esa oscilación; E ralentiza. Shift al arrastrar repele. Los botones admiten ratón, táctil, Enter y Espacio.
-5. La persona descubre que la intensidad cambia la forma y que esta recupera su identidad: resortes amortiguados devuelven cada partícula a su lugar. Tensión amplifica la respuesta, Vínculo refuerza el retorno y Memoria prolonga la resonancia.
+Ejecuta `npm install` si faltan las dependencias y después `npm run dev`. Abre la dirección local que indique Vite. `npm run build` genera dist; `npm run preview` sirve esa compilación. `npm test` comprueba el sintetizador.
 
-Clean, Crunch, Drive y Sustain ofrecen cuatro respuestas. B pausa, R reinicia, P/H alternan presentación, F solicita pantalla completa. Se respeta la preferencia de movimiento reducido.
+Pulsa directamente los trazos dorados de cada letra, los ocho botones o las teclas A S D F G H J K. Cada posición tiene una nota diferente: C4, D4, E4, G4, A4, C5, D5 y E5. Las dos a y las dos l también suenan distinto. Ajusta Volumen o Silenciar. El navegador activa Web Audio en la primera interacción; no hay reproducción automática ni canción descargada.
 
-## Ejecución
+## Diseño
 
-Desde la carpeta del proyecto: `npm run dev`. Para producción: `npm run build`; para comprobarla: `npm run preview`. Pruebas: `npm test`.
+Marshall produce equipos de audio para músicos y amantes de la música. La pieza explora su carácter musical y la amplificación del gesto: una pequeña pulsación produce una nota y una respuesta física breve en el metal. Está planteada como portada web o pantalla táctil en un evento. Se descubren relaciones entre letra, altura musical, secuencia y acorde.
 
-## Informe de agentes y revisión
+El dibujo caligráfico es propio e inspirado en la referencia facilitada. Los trazos son mallas tubulares sólidas con reflejos, volumen, sombras y extremos redondeados. Cada letra se detecta con raycasting. La madera es procedural y local. La cámara conserva su orientación: no hay órbita ni rotación automática. La pulsación desplaza brevemente cada letra y respeta la preferencia de movimiento reducido.
 
-- Agente de simulación: createSimulation.js, flowField.js, gestures.js, parameters.js y pruebas. Resortes, impulsos, campos de dirección y oscilación; estabilidad y regreso a la forma.
-- Agente de representación: heyBackdrop.js y renderer.js. Trazado cursivo local, muestreo determinista de letras, cámara ortográfica y partículas doradas.
-- Agente de interfaz: labPanel.js, styles.css e index.html. Controles, adaptación móvil y diálogo con las cinco consideraciones.
-- Integración: main.js, eliminación de player.js y not-ok.mp3, conexión de objetivos tipográficos y controles. Correcciones de calidad: Memoria afecta a la amortiguación visible, Tensión afecta al arrastre y vibración, color de shader convertido a espacio de pantalla, gesto táctil sin desplazamiento de página.
+## Arquitectura nueva
 
-Validación: build de producción correcto; 12 pruebas aprobadas; revisión visual de escritorio (1280 × 720) y móvil (390 × 844); comprobación de presets, presentación y diálogo. Sin errores en la consola del navegador durante la revisión. Vite avisa de un paquete de ~541 kB, principalmente Three.js. La vista previa integrada mostró una frecuencia reducida; no se certifica una tasa de cuadros estable en el equipo del usuario.
+- src/lettering.js: ocho grupos de trazos vectoriales.
+- src/renderer.js: escena Three.js, nogal, oro, luces, cámara fija, selección y respuesta de las letras.
+- src/audio/instrument.js: sintetizador Web Audio con ocho alturas, envolvente, armónicos, volumen, compresor y límite de polifonía.
+- src/ui/instrumentPanel.js: teclado accesible, volumen, silencio y explicación.
+- src/main.js: coordinación de eventos, teclado, sonido, renderizado y cambios de tamaño.
+- src/styles.css e index.html: estructura adaptable.
 
-No hay reproducción de audio ni archivo de canción en public o dist. Los documentos antiguos sobre el proyecto musical se conservan como antecedentes; esta guía describe la versión actual.
+Se retiran los antiguos módulos simulation, heyBackdrop y labPanel y sus pruebas: este proyecto ya no utiliza partículas. No necesita fuentes, texturas o sonidos descargados en tiempo de ejecución.
 
-## Referencias
-
-- [Marshall](https://www.marshall.com/ch/en/about-marshall)
-- [Word as Image, Ji Lee](https://pleaseenjoy.com/word-as-image/)
-- [Playables](https://playables.net/)
-
-Exploración académica sin afiliación con Marshall.
+Referencias: https://www.marshall.com/ch/en/about-marshall · https://pleaseenjoy.com/word-as-image/ · https://playables.net/
