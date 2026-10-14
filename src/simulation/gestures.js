@@ -26,7 +26,7 @@ export function registerManualPulse(params, time) {
 
 export function strike(params, power = 1, spread = false, time) {
   if (!spread && time !== undefined) registerManualPulse(params,time);
-  params.pulse = clamp(power,0,1);
+  params.pulse = Number.isFinite(power) ? clamp(power,0,1) : 0;
   params.spreadBurst = spread;
   params.localHit = !spread && params.pointer.active;
   params.pulseDuration = clamp(params.rhythm.beatSeconds * (spread ? 0.68 : 0.44),0.12,spread ? 0.42 : 0.28);
@@ -42,3 +42,4 @@ export function releaseCharge(params) {
   params.charge = 0;
   if (charge > 0.05) strike(params,0.35 + charge * 0.65,true);
 }
+

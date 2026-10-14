@@ -4,11 +4,14 @@ import { createSimulation } from './simulation/createSimulation.js';
 import { strike, releaseCharge } from './simulation/gestures.js';
 import { createStage } from './renderer.js';
 import { createLabPanel } from './ui/labPanel.js';
-import { createPlayer } from './audio/player.js';
+import { createLetterTargets } from './heyBackdrop.js';
 
 const mount = document.querySelector('#app'), params = createParameters();
-let simulation, stage, panel, player;
-let paused = false, performing = true, noticeTimer, lastTime = 0, accumulator = 0;
+const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+params.reducedMotion = motionPreference.matches;
+motionPreference.addEventListener('change', event => { params.reducedMotion = event.matches; });
+let simulation, stage, panel;
+let paused = false, performing = false, noticeTimer, lastTime = 0, accumulator = 0;
 let lastPointerAt = 0, previousPointerX = 0, previousPointerY = 0;
 let statsTime = 0, frameCount = 0, measureTime = 0, particleCount = PARTICLE_COUNT.initial;
 let degraded = false, slowSeconds = 0;
@@ -22,7 +25,7 @@ function updateGesture() {
   mount.dataset.vibrating = String(params.vibrate);
   mount.dataset.hey = String(params.hey);
   mount.dataset.hit = String(params.hitSerial);
-  panel?.setGesture([params.hey && 'HEY', params.pulse > 0.1 && 'Golpe', params.gather && `Carga ${Math.round(params.charge * 100)}%`, params.suspend && 'Vacío', params.vibrate && 'Vibración', params.pointer.active && (params.pointer.repel ? 'Desgarrar' : 'Cortar corriente')].filter(Boolean).join(' + ') || 'Listo para el golpe');
+  panel?.setGesture([params.hey && 'Amplificando', params.pulse > 0.1 && 'Impulso', params.gather && `Carga ${Math.round(params.charge * 100)}%`, params.suspend && 'Cámara lenta', params.vibrate && 'Resonancia', params.pointer.active && (params.pointer.repel ? 'Repulsión' : 'Estirando letras')].filter(Boolean).join(' + ') || 'Arrastra las letras. Descubre su fuerza.');
 }
 function pulse(power = 1, spread = false, markBeat = false) {
   strike(params,power,spread,markBeat ? performance.now() / 1000 : undefined);
@@ -101,7 +104,7 @@ function bindCanvas() {
 }
 function initializeStage(nextCount) {
   release(); stage?.dispose(); particleCount = normalizeParticleCount(nextCount);
-  simulation = createSimulation({params,count:particleCount});
+  simulation = createSimulation({params,count:particleCount,targets:createLetterTargets(particleCount)});
   stage = createStage(mount,simulation,params); bindCanvas(); accumulator = 0;
   stage.setPresentation(performing);
   mount.dataset.agents = String(simulation.count); mount.dataset.status = 'running';
@@ -109,21 +112,16 @@ function initializeStage(nextCount) {
 }
 
 try {
-  player = createPlayer({onChange: state => panel?.updateAudio(state),onError:notify});
   panel = createLabPanel({params,callbacks:{
     preset,perform,fullscreen,pause,reset,gesture,release,notify,
     particleCount: value => {
       const nextCount = normalizeParticleCount(value);
       if (nextCount !== particleCount) { degraded = true; initializeStage(nextCount); }
     },
-    track: () => player.loadTrack(`${import.meta.env.BASE_URL}audio/not-ok.mp3`),
-    audioFile: file => { player.loadFile(file); panel.updateAudio(player.state(),file.name); },
-    audioToggle: () => void player.toggle(), seek: time => player.seek(time),
   }});
   initializeStage(particleCount);
-  panel.setPerformance(performing); mount.dataset.interface = 'hidden';
-  player.loadTrack(`${import.meta.env.BASE_URL}audio/not-ok.mp3`);
-  const controls = {Digit1:()=>preset(0),Digit2:()=>preset(1),Digit3:()=>preset(2),Digit4:()=>preset(3),KeyF:fullscreen,KeyH:perform,KeyP:perform,KeyB:pause,KeyR:reset,KeyM:()=>void player.toggle()};
+  panel.setPerformance(performing); mount.dataset.interface = 'visible';
+  const controls = {Digit1:()=>preset(0),Digit2:()=>preset(1),Digit3:()=>preset(2),Digit4:()=>preset(3),KeyF:fullscreen,KeyH:perform,KeyP:perform,KeyB:pause,KeyR:reset};
   const gestures = {Space:'hey',KeyQ:'pulse',KeyW:'gather',KeyE:'suspend',KeyV:'vibrate'};
   window.addEventListener('keydown',event => {
     if (event.defaultPrevented) return;
@@ -136,10 +134,9 @@ try {
     const textEntry = active?.tagName === 'TEXTAREA' || (active?.tagName === 'INPUT' && !['range','button','file'].includes(active.type)) || active?.isContentEditable;
     if (event.ctrlKey || event.metaKey || event.altKey || textEntry) return;
     if (['KeyP','KeyH'].includes(event.code)) { event.preventDefault(); if (!event.repeat) perform(); return; }
-    if (panel.modalOpen) {
-      if (event.code === 'KeyM' && !event.repeat) { event.preventDefault(); void player.toggle(); }
-      return;
-    }
+    if (panel.modalOpen) return;
+    // Let native buttons and sliders handle their own activation keys.
+    if (['Space','Enter'].includes(event.code) && active?.matches('button,input,select,a')) return;
     if (controls[event.code] || gestures[event.code]) {
       event.preventDefault(); if (event.repeat) return;
       if (gestures[event.code]) gesture(gestures[event.code],true,'keyboard'); else controls[event.code]();
@@ -166,7 +163,7 @@ try {
     frameCount++; measureTime += elapsed; statsTime += elapsed;
     if (statsTime > 0.5) {
       const fps = Math.round(frameCount / measureTime); panel.setStats(fps,simulation.count);
-      panel.updateTime(player.state()); updateGesture();
+      updateGesture();
       mount.dataset.fps = String(fps); mount.dataset.preset = String(params.preset);
       if (fps < 26 && !document.hidden && !paused) slowSeconds += statsTime; else slowSeconds = 0;
       if (slowSeconds > 8 && !degraded && particleCount > PARTICLE_COUNT.initial) {
