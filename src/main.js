@@ -5,8 +5,23 @@ import { createMelody } from './audio/melody.js';
 const mount = document.querySelector('#stage');
 const instrument = createInstrument();
 let stage, frameId, lastFrame = 0;
+let ready = false;
+const powerButton = document.createElement('button');
+powerButton.type = 'button'; powerButton.className = 'power-button';
+powerButton.textContent = 'TURN ON'; powerButton.disabled = true;
+powerButton.setAttribute('aria-label', 'Encender y formar la palabra Marshall');
+powerButton.setAttribute('aria-pressed', 'false');
+document.body.append(powerButton);
+function turnOn() {
+  if (!stage?.turnOn()) return;
+  powerButton.disabled = true; powerButton.classList.add('starting');
+  powerButton.textContent = 'STARTING';
+  mount.dataset.power = 'forming';
+}
+powerButton.addEventListener('click', turnOn);
 const lever = document.createElement('button');
 lever.type = 'button'; lever.className = 'melody-lever';
+lever.disabled = true;
 lever.setAttribute('aria-label', 'Activar melodía automática');
 lever.setAttribute('aria-pressed', 'false');
 lever.title = 'Bajar: melodía automática · Subir: detener';
@@ -14,6 +29,7 @@ lever.innerHTML = '<span class="lever-light" aria-hidden="true"></span><span cla
 document.body.append(lever);
 const melody = createMelody({
   async play(index, isCurrent) {
+    if (!ready) return;
     const sounded = await instrument.play(index, { isCurrent });
     if (sounded && isCurrent()) stage?.strike(index);
   },
@@ -25,15 +41,26 @@ const melody = createMelody({
   },
   onError(error) { console.error(error); lever.title = 'No se pudo activar el audio. Pulsa de nuevo para reintentar.'; },
 });
-const toggleMelody = () => melody.running ? melody.stop() : melody.start();
+const toggleMelody = () => { if (ready) melody.running ? melody.stop() : melody.start(); };
 lever.addEventListener('click', toggleMelody);
 async function play(index) {
-  if (!NOTES[index]) return;
+  if (!ready || !NOTES[index]) return;
   try { if (await instrument.play(index)) stage?.strike(index); }
   catch (error) { console.error('No se pudo activar el sonido', error); }
 }
 try {
-  stage = createStage(mount, { onLetter: play, onHover(index) { mount.dataset.hover = index >= 0 ? String(index) : ''; } });
+  stage = createStage(mount, {
+    onLetter: play,
+    onHover(index) { mount.dataset.hover = index >= 0 ? String(index) : ''; },
+    onReady() {
+      ready = true; lever.disabled = false;
+      powerButton.classList.remove('starting'); powerButton.classList.add('powered');
+      powerButton.textContent = 'ON'; powerButton.setAttribute('aria-pressed', 'true');
+      powerButton.setAttribute('aria-label', 'Marshall encendido');
+      mount.dataset.power = 'ready';
+    },
+  });
+  powerButton.disabled = false; mount.dataset.power = 'off';
   mount.dataset.status = 'ready';
 } catch (error) {
   console.error(error); mount.dataset.status = 'error';
@@ -62,5 +89,6 @@ if (import.meta.hot) import.meta.hot.dispose(() => {
   window.removeEventListener('keydown', onKey);
   document.removeEventListener('visibilitychange', onVisibility);
   melody.stop(); lever.removeEventListener('click', toggleMelody); lever.remove();
+  powerButton.removeEventListener('click', turnOn); powerButton.remove();
   stage?.dispose(); instrument.dispose();
 });

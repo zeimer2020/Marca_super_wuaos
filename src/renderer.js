@@ -4,9 +4,11 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { LETTER_PATHS } from './lettering.js';
 import { createSurface, addClassicBar } from './surfaces.js';
+import { createPowerTransition } from './power.js';
 
 
-export function createStage(mount, { onLetter = () => {}, onHover = () => {} } = {}) {
+export function createStage(mount, { onLetter = () => {}, onHover = () => {}, onReady = () => {} } = {}) {
+  const power = createPowerTransition(onReady);
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setClearColor(0x000000, 0);
@@ -102,7 +104,8 @@ export function createStage(mount, { onLetter = () => {}, onHover = () => {} } =
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(360, 360), new THREE.MeshStandardMaterial({ map: floorMap, color: 0x94775d, roughness: 0.64 }));
   floor.rotation.x = -Math.PI / 2; floor.position.y = -5.68; floor.receiveShadow = true; scene.add(floor);
   const loader = new SVGLoader();
-  const letters = [], clickable = [], states = [];
+  const letters = [], clickable = [], states = [], wires = [], tips = [];
+  let strand = 0;
   class ScriptCurve extends THREE.Curve {
     constructor(path) { super(); this.path = path; }
     getPoint(t, target = new THREE.Vector3()) {
@@ -117,12 +120,30 @@ export function createStage(mount, { onLetter = () => {}, onHover = () => {} } =
     for (const path of svg.paths) for (const subpath of path.subPaths) {
       const curve = new ScriptCurve(subpath);
       const length = subpath.getLength();
-      const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(64, Math.ceil(length * 0.9)), 0.17, 24, false), gold);
+      const segments = Math.max(64, Math.ceil(length * 0.9));
+      const geometry = new THREE.TubeGeometry(curve, segments, .17, 24, false);
+      const seed = strand++;
+      // Each existing stroke begins as a loose cable, with matching topology.
+      // Morphing the tube itself makes the cable bend into its final letter.
+      const centerX = ((seed * .61803398875) % 1 - .5) * 23;
+      const centerY = ((seed * .41421356237 + .2) % 1 - .5) * 9;
+      const loose = new THREE.CatmullRomCurve3(Array.from({ length: 6 }, (_, j) =>
+        new THREE.Vector3(centerX + Math.sin(seed * 2.1 + j * 1.3) * 3.2,
+          centerY + Math.cos(seed * 1.7 + j * 1.1) * 1.8, .12 + Math.sin(j * .9 + seed) * .1)));
+      const scattered = new THREE.TubeGeometry(loose, segments, .17, 24, false);
+      geometry.morphAttributes.position = [scattered.attributes.position.clone()];
+      geometry.morphAttributes.normal = [scattered.attributes.normal.clone()];
+      scattered.dispose();
+      const mesh = new THREE.Mesh(geometry, gold);
+      mesh.morphTargetInfluences[0] = 1; mesh.frustumCulled = false;
+      wires.push(mesh);
       mesh.castShadow = true; mesh.receiveShadow = true; mesh.userData.letter = index;
       group.add(mesh); clickable.push(mesh);
       for (const t of [0, 1]) {
         const cap = new THREE.Mesh(new THREE.SphereGeometry(0.17, 24, 16), gold);
-        cap.position.copy(curve.getPoint(t)); cap.castShadow = true; cap.userData.letter = index;
+        const home = curve.getPoint(t), start = loose.getPoint(t);
+        cap.position.copy(start); cap.castShadow = true; cap.userData.letter = index;
+        tips.push({ cap, home, start });
         group.add(cap); clickable.push(cap);
       }
     }
@@ -131,6 +152,7 @@ export function createStage(mount, { onLetter = () => {}, onHover = () => {} } =
   let hovered = -1;
   const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
   function hit(event) {
+    if (power.state !== 'ready') return -1;
     const rect = canvas.getBoundingClientRect();
     pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2);
     raycaster.setFromCamera(pointer, camera);
@@ -160,10 +182,13 @@ export function createStage(mount, { onLetter = () => {}, onHover = () => {} } =
     scene.updateMatrixWorld(true);
   }
   let jump = 0, jumpVelocity = 0;
-  function strike(index) { if (states[index]) { states[index].age = 0; jumpVelocity = Math.min(4, Math.max(0, jumpVelocity) + 3.2); } }
+  function strike(index) { if (power.state === 'ready' && states[index]) { states[index].age = 0; jumpVelocity = Math.min(4, Math.max(0, jumpVelocity) + 3.2); } }
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   function draw(delta = 0.016) {
     const dt = Math.max(0, Math.min(delta, .05));
+    const formed = power.step(dt, reduced.matches);
+    for (const wire of wires) wire.morphTargetInfluences[0] = 1 - formed;
+    for (const tip of tips) tip.cap.position.lerpVectors(tip.start, tip.home, formed);
     // Small substeps keep the soft landing stable at low frame rates.
     for (let remaining = dt; remaining > 0;) {
       const step = Math.min(remaining, 1 / 120); remaining -= step;
@@ -179,12 +204,13 @@ export function createStage(mount, { onLetter = () => {}, onHover = () => {} } =
       const strength = Math.exp(-state.age * 4.5);
       letters[i].position.z = 0.8 + (reduced.matches ? 0 : Math.sin(state.age * 22) * 0.34 * strength);
       letters[i].position.y = 2.65 + (reduced.matches ? 0 : Math.sin(state.age * 14) * 0.08 * strength);
-      state.material.emissiveIntensity = strength * (reduced.matches ? 0.28 : 0.65) + (hovered === i ? 0.16 : 0);
+      const ignition = power.state === 'forming' ? Math.sin(formed * Math.PI) * .75 : 0;
+      state.material.emissiveIntensity = power.state === 'off' ? 0 : .05 + ignition + strength * (reduced.matches ? 0.28 : 0.65) + (hovered === i ? 0.16 : 0);
     });
     renderer.render(scene, camera);
   }
   resize(); draw();
-  return { canvas, resize, draw, strike, dispose() {
+  return { canvas, resize, draw, strike, turnOn: () => power.start(), dispose() {
     canvas.removeEventListener('pointermove', move); canvas.removeEventListener('pointerleave', leave); canvas.removeEventListener('pointerdown', press);
     const materials = new Set(), geometries = new Set();
     scene.traverse(object => { if (object.geometry) geometries.add(object.geometry); if (object.material) materials.add(object.material); });
