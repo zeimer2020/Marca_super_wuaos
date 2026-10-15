@@ -64,6 +64,8 @@ export function createStage(mount, { onLetter = () => {}, onHover = () => {} } =
   box(180, 0.7, 0.5, walnut, 0, -4.8, -11.4, 0.08);
   box(180, 0.3, 0.4, walnut, 0, 12, -11.5, 0.05);
   addClassicBar(scene, { box, walnut, bronze, darkWood, leather });
+  const cabinet = new THREE.Group(); scene.add(cabinet);
+  const roomObjects = new Set(scene.children);
   // Black textured cabinet with a recessed woven grille and narrow brass piping.
   // Proportions and top-mounted brass controls evoke Marshall home speakers.
   box(30.2, 16, 6.4, tolex, 0, 2.8, -3.05, .58);
@@ -96,6 +98,7 @@ export function createStage(mount, { onLetter = () => {}, onHover = () => {} } =
   toggle.position.set(6.15, 11.2, -3.05); toggle.rotation.z = -.25; scene.add(toggle);
   const socket = new THREE.Mesh(new THREE.TorusGeometry(.23, .08, 12, 32), dialFace);
   socket.rotation.x = -Math.PI / 2; socket.position.set(-6.15, 10.96, -3.05); scene.add(socket);
+  for (const object of [...scene.children]) if (!roomObjects.has(object)) cabinet.add(object);
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(360, 360), new THREE.MeshStandardMaterial({ map: floorMap, color: 0x94775d, roughness: 0.64 }));
   floor.rotation.x = -Math.PI / 2; floor.position.y = -5.68; floor.receiveShadow = true; scene.add(floor);
   const loader = new SVGLoader();
@@ -123,7 +126,7 @@ export function createStage(mount, { onLetter = () => {}, onHover = () => {} } =
         group.add(cap); clickable.push(cap);
       }
     }
-    scene.add(group); letters.push(group); states.push({ age: 10, material: gold });
+    cabinet.add(group); letters.push(group); states.push({ age: 10, material: gold });
   });
   let hovered = -1;
   const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
@@ -142,7 +145,7 @@ export function createStage(mount, { onLetter = () => {}, onHover = () => {} } =
   const press = event => {
     if (event.button !== 0) return;
     const index = hit(event);
-    if (index >= 0) { strike(index); onLetter(index); }
+    if (index >= 0) onLetter(index);
   };
   canvas.addEventListener('pointermove', move);
   canvas.addEventListener('pointerleave', leave);
@@ -156,9 +159,21 @@ export function createStage(mount, { onLetter = () => {}, onHover = () => {} } =
     camera.lookAt(0, 2.6, 0); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
     scene.updateMatrixWorld(true);
   }
-  function strike(index) { if (states[index]) states[index].age = 0; }
+  let jump = 0, jumpVelocity = 0;
+  function strike(index) { if (states[index]) { states[index].age = 0; jumpVelocity = Math.min(4, Math.max(0, jumpVelocity) + 3.2); } }
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   function draw(delta = 0.016) {
+    const dt = Math.max(0, Math.min(delta, .05));
+    // Small substeps keep the soft landing stable at low frame rates.
+    for (let remaining = dt; remaining > 0;) {
+      const step = Math.min(remaining, 1 / 120); remaining -= step;
+      jumpVelocity += (-85 * jump - 11 * jumpVelocity) * step;
+      jump += jumpVelocity * step;
+      if (jump < 0) { jump = 0; jumpVelocity = 0; }
+      if (jump > .6) { jump = .6; jumpVelocity = Math.min(0, jumpVelocity); }
+    }
+    if (reduced.matches) { jump = 0; jumpVelocity = 0; }
+    cabinet.position.y = jump;
     states.forEach((state, i) => {
       state.age += Math.min(delta, 0.05);
       const strength = Math.exp(-state.age * 4.5);
@@ -178,6 +193,7 @@ export function createStage(mount, { onLetter = () => {}, onHover = () => {} } =
     for (const surface of [woodSurface, clothSurface, leatherSurface, tolexSurface]) { surface.color.dispose(); surface.bump.dispose(); } environment.dispose(); renderer.dispose(); canvas.remove();
   } };
 }
+
 
 
 

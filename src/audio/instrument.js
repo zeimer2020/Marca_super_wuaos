@@ -72,14 +72,14 @@ export function createInstrument() {
   }
 
   return {
-    async play(index) {
+    async play(index, { isCurrent = () => true } = {}) {
       if (!Number.isInteger(index) || index < 0 || index >= NOTES.length) throw new RangeError('Índice de letra inválido.');
       if (disposed) throw new Error('El instrumento ya está cerrado.');
       if (muted || volume === 0) return false;
       // Called directly by pointer/keyboard handlers: no audio context on load.
       initialize();
       if (context.state !== 'running') await context.resume();
-      if (disposed || muted || volume === 0) return false;
+      if (disposed || muted || volume === 0 || !isCurrent()) return false;
       if (context.state !== 'running') throw new Error('Activa el sonido con un clic o una tecla.');
       while (voices.size >= 12) releaseVoice(voices.values().next().value);
 
@@ -119,6 +119,7 @@ export function createInstrument() {
       }
       return true;
     },
+    stopAll() { for (const voice of [...voices]) releaseVoice(voice); },
     setVolume(value) {
       if (!Number.isFinite(value)) throw new TypeError('El volumen debe ser un número.');
       volume = Math.min(1, Math.max(0, value));
@@ -140,3 +141,4 @@ export function createInstrument() {
     },
   };
 }
+
